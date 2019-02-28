@@ -17,6 +17,7 @@ parameters:
         - '*tests/Rector/MethodCall/RenameMethodRector/**/SomeClass.php'
         - '*packages/BetterReflection/tests/Reflector/NotLoadedSource/SomeClass.php'
         - 'packages/NodeTypeResolver/tests/PerNodeTypeResolver/VariableTypeResolver/Source/NewClass.php'
+        - '*packages/Spaghetti/tests/Rector/ExtractPhpFromSpaghettiRector/Expected/*'
         # tests files
         - '*tests/**/Fixture/*'
         - '*tests/**/Source/*'
