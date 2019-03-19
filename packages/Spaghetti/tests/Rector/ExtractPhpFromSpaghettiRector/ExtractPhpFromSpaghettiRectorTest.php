@@ -55,7 +55,7 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
         yield [
             __DIR__ . '/Source/index.php',
             [
-                //                __DIR__ . '/Source/index_template.php' => __DIR__ . '/Expected/index_template.php',
+                //                                __DIR__ . '/Source/index_template.php' => __DIR__ . '/Expected/index_template.php',
                 __DIR__ . '/Source/IndexController.php' => __DIR__ . '/Expected/IndexController.php',
             ],
         ];

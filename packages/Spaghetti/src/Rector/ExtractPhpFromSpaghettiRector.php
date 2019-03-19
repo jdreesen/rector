@@ -2,17 +2,18 @@
 
 namespace Rector\Spaghetti\Rector;
 
+use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Assign;
-use PhpParser\Node\Expr\Include_;
 use PhpParser\Node\Expr\Variable;
-use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Echo_;
 use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Stmt\Global_;
 use PhpParser\Node\Stmt\InlineHTML;
 use Rector\FileSystemRector\Rector\AbstractFileSystemRector;
 use Rector\PhpParser\Node\NodeFactory;
+use Rector\RectorDefinition\CodeSample;
 use Rector\RectorDefinition\RectorDefinition;
 use Symplify\PackageBuilder\FileSystem\SmartFileInfo;
 
@@ -60,24 +61,7 @@ final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
         }
 
         // create Controller here
-        dump($variables);
-
-        $controllerName = $this->createControllerName($smartFileInfo);
-        $classController = new Class_($controllerName);
-
-        $renderMethod = new ClassMethod('render');
-        $renderMethod->flags |= Class_::MODIFIER_PUBLIC;
-
-        foreach ($variables as $name => $expr) {
-            $renderMethod->stmts[] = new Assign(new Variable($name), $expr);
-        }
-
-        $include = new Include_(new String_('some_file'), Include_::TYPE_REQUIRE_ONCE);
-        $renderMethod->stmts[] = new Expression($include);
-
-        // include file
-//        $renderMethod->stmts[] = new Include_();
-        $classController->stmts[] = $renderMethod;
+        $classController = $this->createControllerClass($smartFileInfo, $variables);
 
         // print controller
         $fileDestination = $this->createControllerFileDestination($smartFileInfo);
@@ -86,6 +70,45 @@ final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
 
     public function getDefinition(): RectorDefinition
     {
+        return new RectorDefinition(
+            'Take spaghetti template and separate it into 2 files: new class with render() method and variables + template only using the variables',
+            [
+                new CodeSample(
+                    <<<'CODE_SAMPLE'
+<ul>
+    <li><a href="<?php echo 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI']; ?>">Odkaz</a>
+</ul>
+CODE_SAMPLE
+                    ,
+                    <<<'CODE_SAMPLE'
+<?php
+
+class IndexController
+{
+    public function render()
+    {
+        global $variable1;
+        $variable1 = 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+    }
+}
+
+?>
+
+-----
+
+<?php
+
+(new IndexController)->render();
+
+?>
+
+<ul>
+    <li><a href="<?php echo $variable1 ?>">Odkaz</a>
+</ul>
+CODE_SAMPLE
+                ),
+            ]
+        );
     }
 
     private function createControllerFileDestination(SmartFileInfo $smartFileInfo): string
@@ -100,5 +123,35 @@ final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
     private function createControllerName(SmartFileInfo $smartFileInfo): string
     {
         return ucfirst($smartFileInfo->getBasenameWithoutSuffix()) . 'Controller';
+    }
+
+    /**
+     * @param Expr[] $variables
+     */
+    private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables): Class_
+    {
+        $controllerName = $this->createControllerName($smartFileInfo);
+        $classController = new Class_($controllerName);
+
+        $renderMethod = $this->createControllerRenderMethod($variables);
+        $classController->stmts[] = $renderMethod;
+
+        return $classController;
+    }
+
+    /**
+     * @param Expr[] $variables
+     */
+    private function createControllerRenderMethod(array $variables): ClassMethod
+    {
+        $renderMethod = $this->nodeFactory->createPublicMethod('render');
+
+        foreach ($variables as $name => $expr) {
+            $variable = new Variable($name);
+            $renderMethod->stmts[] = new Global_([$variable]);
+            $renderMethod->stmts[] = new Expression(new Assign($variable, $expr));
+        }
+
+        return $renderMethod;
     }
 }
