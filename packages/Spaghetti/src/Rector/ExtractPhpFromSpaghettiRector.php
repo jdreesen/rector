@@ -24,9 +24,20 @@ use Rector\FileSystemRector\Rector\AbstractFileSystemRector;
 use Rector\RectorDefinition\CodeSample;
 use Rector\RectorDefinition\RectorDefinition;
 use Symplify\PackageBuilder\FileSystem\SmartFileInfo;
+use Symplify\PackageBuilder\Strings\StringFormatConverter;
 
 final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
 {
+    /**
+     * @var StringFormatConverter
+     */
+    private $stringFormatConverter;
+
+    public function __construct(StringFormatConverter $stringFormatConverter)
+    {
+        $this->stringFormatConverter = $stringFormatConverter;
+    }
+
     public function getDefinition(): RectorDefinition
     {
         return new RectorDefinition(
@@ -100,6 +111,9 @@ CODE_SAMPLE
 
                     $node->exprs[0] = new Variable($variableName);
                 }
+            } else {
+                // @todo
+//                dump($node);
             }
         }
 
@@ -146,7 +160,8 @@ CODE_SAMPLE
 
     private function createControllerName(SmartFileInfo $smartFileInfo): string
     {
-        return ucfirst($smartFileInfo->getBasenameWithoutSuffix()) . 'Controller';
+        $camelCaseName = $this->stringFormatConverter->underscoreToCamelCase($smartFileInfo->getBasenameWithoutSuffix());
+        return ucfirst($camelCaseName) . 'Controller';
     }
 
     /**
