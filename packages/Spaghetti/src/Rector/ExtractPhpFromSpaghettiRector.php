@@ -9,6 +9,7 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayItem;
 use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\AssignOp;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\New_;
@@ -18,12 +19,15 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Declare_;
 use PhpParser\Node\Stmt\Echo_;
 use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\Node\Stmt\InlineHTML;
 use PhpParser\Node\Stmt\Return_;
 use Rector\Exception\ShouldNotHappenException;
 use Rector\FileSystemRector\Rector\AbstractFileSystemRector;
+use Rector\PhpParser\NodeTraverser\CallableNodeTraverser;
 use Rector\RectorDefinition\CodeSample;
 use Rector\RectorDefinition\RectorDefinition;
 use Symplify\PackageBuilder\FileSystem\SmartFileInfo;
@@ -36,9 +40,27 @@ final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
      */
     private $stringFormatConverter;
 
-    public function __construct(StringFormatConverter $stringFormatConverter)
-    {
+    /**
+     * @var Node[]
+     */
+    private $rootNodesToRenderMethod = [];
+
+    /**
+     * @var CallableNodeTraverser
+     */
+    private $callableNodeTraverser;
+
+    /**
+     * @var Node[]
+     */
+    private $nodesContainingEcho = [];
+
+    public function __construct(
+        StringFormatConverter $stringFormatConverter,
+        CallableNodeTraverser $callableNodeTraverser
+    ) {
         $this->stringFormatConverter = $stringFormatConverter;
+        $this->callableNodeTraverser = $callableNodeTraverser;
     }
 
     public function getDefinition(): RectorDefinition
@@ -93,14 +115,15 @@ CODE_SAMPLE
 
     public function refactor(SmartFileInfo $smartFileInfo): void
     {
+        $this->rootNodesToRenderMethod = [];
+        $this->nodesContainingEcho = [];
+
         $nodes = $this->parseFileInfoToNodes($smartFileInfo);
 
         // analyze here! - collect variables
         $variables = [];
 
         $i = 0;
-
-        $rootNodesToRenderMethod = [];
 
         foreach ($nodes as $key => $node) {
             if ($node instanceof InlineHTML) {
@@ -125,11 +148,18 @@ CODE_SAMPLE
             } else {
                 // expression assign variable!?
                 if ($this->isNodeEchoedAnywhereInside($node)) {
+                    $this->rootNodesToRenderMethod[] = $node;
+                    $this->nodesContainingEcho[] = $node;
                     // @todo solve
                     dump('YES');
                 } else {
+                    // nodes to skip
+                    if ($node instanceof Declare_) {
+                        continue;
+                    }
+
                     // just copy
-                    $rootNodesToRenderMethod[] = $node;
+                    $this->rootNodesToRenderMethod[] = $node;
                     // remove node
                     unset($nodes[$key]);
                     continue;
@@ -137,7 +167,7 @@ CODE_SAMPLE
             }
         }
 
-        $classController = $this->createControllerClass($smartFileInfo, $variables, $rootNodesToRenderMethod);
+        $classController = $this->createControllerClass($smartFileInfo, $variables);
 
         // print controller
         $fileDestination = $this->createControllerFileDestination($smartFileInfo);
@@ -171,21 +201,20 @@ CODE_SAMPLE
      * @param Expr[] $variables
      * @param Stmt[] $prependNodes
      */
-    private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables, array $prependNodes): Class_
+    private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables): Class_
     {
         $controllerName = $this->createControllerName($smartFileInfo);
 
         $classController = new Class_($controllerName);
-        $classController->stmts[] = $this->createControllerRenderMethod($variables, $prependNodes);
+        $classController->stmts[] = $this->createControllerRenderMethod($variables);
 
         return $classController;
     }
 
     /**
      * @param Expr[] $variables
-     * @param Stmt[] $prependNodes
      */
-    private function createControllerRenderMethod(array $variables, array $prependNodes): ClassMethod
+    private function createControllerRenderMethod(array $variables): ClassMethod
     {
         $renderMethod = $this->nodeFactory->createPublicMethod('render');
 
@@ -194,8 +223,15 @@ CODE_SAMPLE
             $array->items[] = new ArrayItem($expr, new String_($name));
         }
 
-        if ($prependNodes) {
-            $renderMethod->stmts = $prependNodes;
+        if ($this->rootNodesToRenderMethod) {
+            foreach ($this->rootNodesToRenderMethod as $key => $nodeToRenderMethod) {
+                // make any changes in them permanent, e.g. foreach with value change → re-assign value "$values[$key] = $value;"
+                if (in_array($nodeToRenderMethod, $this->nodesContainingEcho, true)) {
+                    $this->rootNodesToRenderMethod[$key] = $this->makeChangePersistent($nodeToRenderMethod);
+                }
+            }
+
+            $renderMethod->stmts = $this->rootNodesToRenderMethod;
         }
 
         $renderMethod->stmts[] = new Return_($array);
@@ -236,5 +272,56 @@ CODE_SAMPLE
 
         // remove "? >...< ?php" leftovers
         return Strings::replace($fileContent, '#\?\>(\s+)\<\?php#s');
+    }
+
+    private function makeChangePersistent(Node $node): Node
+    {
+        $nodes = $this->callableNodeTraverser->traverseNodesWithCallable([$node], function (Node $node) {
+
+            // complete assign to foreach if not recorded yet
+            if ($node instanceof Foreach_) { // @todo or anything with "stmts" property
+                $foreach = $node;
+                foreach ($foreach->stmts as $key => $foreachStmt) {
+                    $foreachStmt = $foreachStmt instanceof Expression ? $foreachStmt->expr : $foreachStmt;
+
+                    if ($foreachStmt instanceof Echo_) {
+                        // silence echoes
+                        unset($foreach->stmts[$key]);
+                        return $foreach;
+                    }
+
+                    if ($foreachStmt instanceof AssignOp) {
+                        if (! $this->areNodesEqual($foreach->valueVar, $foreachStmt->var)) {
+                            return $foreach;
+                        }
+
+                        if (! $this->areNodesEqual($foreach->valueVar, $foreachStmt->var)) {
+                            return $node;
+                        }
+
+                        $assign = $this->createForeachKeyAssign($foreach, $foreachStmt->var);
+                        $foreach->stmts[] = new Expression($assign);
+                    }
+                }
+            }
+
+            return $node;
+        });
+
+        // only 1 node passed → 1 node is returned
+        return array_pop($nodes);
+    }
+
+    private function createForeachKeyAssign(Foreach_ $foreach, Expr $expr): Assign
+    {
+        if ($foreach->keyVar === null) {
+            $foreach->keyVar = new Variable('key'); // @todo check for duplicit name in nested foreaches
+        }
+
+        $keyVariable = $foreach->keyVar;
+
+        $arrayDimFetch = new Expr\ArrayDimFetch($foreach->expr, $keyVariable);
+
+        return new Assign($arrayDimFetch, $expr);
     }
 }
