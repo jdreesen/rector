@@ -7,6 +7,7 @@ use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\ArrayItem;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\AssignOp;
@@ -150,8 +151,6 @@ CODE_SAMPLE
                 if ($this->isNodeEchoedAnywhereInside($node)) {
                     $this->rootNodesToRenderMethod[] = $node;
                     $this->nodesContainingEcho[] = $node;
-                    // @todo solve
-                    dump('YES');
                 } else {
                     // nodes to skip
                     if ($node instanceof Declare_) {
@@ -320,7 +319,7 @@ CODE_SAMPLE
 
         $keyVariable = $foreach->keyVar;
 
-        $arrayDimFetch = new Expr\ArrayDimFetch($foreach->expr, $keyVariable);
+        $arrayDimFetch = new ArrayDimFetch($foreach->expr, $keyVariable);
 
         return new Assign($arrayDimFetch, $expr);
     }
