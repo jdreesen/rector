@@ -1,6 +1,7 @@
 <?php
 
-(new IndexController)->render();
+$values = (new IndexController)->render();
+extract($values);
 
 ?>
 

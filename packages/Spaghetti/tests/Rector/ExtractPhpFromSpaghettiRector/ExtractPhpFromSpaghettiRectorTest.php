@@ -37,16 +37,16 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
     }
 
     /**
-     * @param string[] $expectedExceptions
+     * @param string[] $expectedFiles
      * @dataProvider provideExceptionsData
      */
-    public function test(string $file, array $expectedExceptions): void
+    public function test(string $file, array $expectedFiles): void
     {
         $this->fileSystemFileProcessor->processFileInfo(new SmartFileInfo($file));
 
-        foreach ($expectedExceptions as $expectedExceptionLocation => $expectedFormat) {
-            $this->assertFileExists($expectedExceptionLocation);
-            $this->assertFileEquals($expectedFormat, $expectedExceptionLocation);
+        foreach ($expectedFiles as $expectedFileLocation => $expectedFileContent) {
+            $this->assertFileExists($expectedFileLocation);
+            $this->assertFileEquals($expectedFileContent, $expectedFileLocation);
         }
     }
 
@@ -55,7 +55,8 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
         yield [
             __DIR__ . '/Source/index.php',
             [
-                //                                __DIR__ . '/Source/index_template.php' => __DIR__ . '/Expected/index_template.php',
+                // expected file location => expected file content
+//                __DIR__ . '/Source/index_template.php' => __DIR__ . '/Expected/index_template.php',
                 __DIR__ . '/Source/IndexController.php' => __DIR__ . '/Expected/IndexController.php',
             ],
         ];

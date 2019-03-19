@@ -3,14 +3,18 @@
 namespace Rector\Spaghetti\Rector;
 
 use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\ArrayItem;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Echo_;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\Global_;
 use PhpParser\Node\Stmt\InlineHTML;
+use PhpParser\Node\Stmt\Return_;
 use Rector\FileSystemRector\Rector\AbstractFileSystemRector;
 use Rector\PhpParser\Node\NodeFactory;
 use Rector\RectorDefinition\CodeSample;
@@ -87,8 +91,9 @@ class IndexController
 {
     public function render()
     {
-        global $variable1;
-        $variable1 = 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
+        return [
+            'variable1' => 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI']
+        ];
     }
 }
 
@@ -98,7 +103,8 @@ class IndexController
 
 <?php
 
-(new IndexController)->render();
+$variables = (new IndexController)->render();
+extract($variables);
 
 ?>
 
@@ -115,9 +121,7 @@ CODE_SAMPLE
     {
         $currentDirectory = dirname($smartFileInfo->getRealPath());
 
-        return $currentDirectory . DIRECTORY_SEPARATOR . ucfirst(
-            $smartFileInfo->getBasenameWithoutSuffix()
-        ) . 'Controller.php';
+        return $currentDirectory . DIRECTORY_SEPARATOR . $this->createControllerName($smartFileInfo) . '.php';
     }
 
     private function createControllerName(SmartFileInfo $smartFileInfo): string
@@ -146,11 +150,12 @@ CODE_SAMPLE
     {
         $renderMethod = $this->nodeFactory->createPublicMethod('render');
 
+        $array = new Array_();
         foreach ($variables as $name => $expr) {
-            $variable = new Variable($name);
-            $renderMethod->stmts[] = new Global_([$variable]);
-            $renderMethod->stmts[] = new Expression(new Assign($variable, $expr));
+            $array->items[] = new ArrayItem($expr, new String_($name));
         }
+
+        $renderMethod->stmts[] = new Return_($array);
 
         return $renderMethod;
     }
