@@ -3,9 +3,9 @@
 namespace Rector\Spaghetti\Tests\Rector\ExtractPhpFromSpaghettiRector;
 
 use Iterator;
+use Nette\Utils\FileSystem;
 use Rector\FileSystemRector\FileSystemFileProcessor;
 use Rector\HttpKernel\RectorKernel;
-use Symfony\Component\Filesystem\Filesystem;
 use Symplify\PackageBuilder\FileSystem\SmartFileInfo;
 use Symplify\PackageBuilder\Tests\AbstractKernelTestCase;
 
@@ -23,6 +23,8 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
     {
         $this->bootKernelWithConfigs(RectorKernel::class, [__DIR__ . '/config.yaml']);
         $this->fileSystemFileProcessor = self::$container->get(FileSystemFileProcessor::class);
+
+        FileSystem::copy(__DIR__ . '/Backup', __DIR__ . '/Source');
     }
 
     protected function tearDown(): void
@@ -32,8 +34,7 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
         }
 
         // cleanup filesystem
-        $generatedFiles = array_keys($this->getProvidedData()[1]);
-        (new Filesystem())->remove($generatedFiles);
+        FileSystem::delete(__DIR__ . '/Source');
     }
 
     /**
@@ -46,6 +47,7 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
 
         foreach ($expectedFiles as $expectedFileLocation => $expectedFileContent) {
             $this->assertFileExists($expectedFileLocation);
+
             $this->assertFileEquals($expectedFileContent, $expectedFileLocation);
         }
     }
@@ -56,7 +58,7 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
             __DIR__ . '/Source/index.php',
             [
                 // expected file location => expected file content
-//                __DIR__ . '/Source/index_template.php' => __DIR__ . '/Expected/index_template.php',
+                __DIR__ . '/Source/index.php' => __DIR__ . '/Expected/index.php',
                 __DIR__ . '/Source/IndexController.php' => __DIR__ . '/Expected/IndexController.php',
             ],
         ];

@@ -6,72 +6,25 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayItem;
 use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Echo_;
 use PhpParser\Node\Stmt\Expression;
-use PhpParser\Node\Stmt\Global_;
 use PhpParser\Node\Stmt\InlineHTML;
 use PhpParser\Node\Stmt\Return_;
 use Rector\FileSystemRector\Rector\AbstractFileSystemRector;
-use Rector\PhpParser\Node\NodeFactory;
 use Rector\RectorDefinition\CodeSample;
 use Rector\RectorDefinition\RectorDefinition;
 use Symplify\PackageBuilder\FileSystem\SmartFileInfo;
 
 final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
 {
-    /**
-     * @var NodeFactory
-     */
-    private $nodeFactory;
-
-    public function __construct(NodeFactory $nodeFactory)
-    {
-        $this->nodeFactory = $nodeFactory;
-    }
-
-    public function refactor(SmartFileInfo $smartFileInfo): void
-    {
-        $nodes = $this->parseFileInfoToNodes($smartFileInfo);
-
-        // analyze here! - collect variables
-        $variables = [];
-
-        $i = 0;
-        foreach ($nodes as $node) {
-            if ($node instanceof InlineHTML) {
-                // @todo are we in a for/foreach?
-                continue;
-            }
-
-            if ($node instanceof Echo_) {
-                if (count($node->exprs) === 1) {
-                    // it is already variable, nothing to change
-                    if ($node->exprs[0] instanceof Variable) {
-                        continue;
-                    }
-
-                    ++$i;
-
-                    $variableName = 'variable' . $i;
-                    $variables[$variableName] = $node->exprs[0];
-
-                    $node->exprs[0] = new Variable($variableName);
-                }
-            }
-        }
-
-        // create Controller here
-        $classController = $this->createControllerClass($smartFileInfo, $variables);
-
-        // print controller
-        $fileDestination = $this->createControllerFileDestination($smartFileInfo);
-        $this->printNodesToFilePath([$classController], $fileDestination);
-    }
-
     public function getDefinition(): RectorDefinition
     {
         return new RectorDefinition(
@@ -117,6 +70,60 @@ CODE_SAMPLE
         );
     }
 
+    public function refactor(SmartFileInfo $smartFileInfo): void
+    {
+        $nodes = $this->parseFileInfoToNodes($smartFileInfo);
+
+        // analyze here! - collect variables
+        $variables = [];
+
+        $i = 0;
+        foreach ($nodes as $node) {
+            if ($node instanceof InlineHTML) {
+                // @todo are we in a for/foreach?
+                continue;
+            }
+
+            if ($node instanceof Echo_) {
+                if (count($node->exprs) === 1) {
+                    // it is already variable, nothing to change
+                    if ($node->exprs[0] instanceof Variable) {
+                        continue;
+                    }
+
+                    ++$i;
+
+                    $variableName = 'variable' . $i;
+                    $variables[$variableName] = $node->exprs[0];
+
+                    $node->exprs[0] = new Variable($variableName);
+                }
+            }
+        }
+
+        // create Controller here
+        $classController = $this->createControllerClass($smartFileInfo, $variables);
+
+        // print controller
+        $fileDestination = $this->createControllerFileDestination($smartFileInfo);
+        $this->printNodesToFilePath([$classController], $fileDestination);
+
+        $newController = new New_(new Name($classController->name->toString()));
+        $renderMethodCall = new MethodCall($newController, 'render');
+
+        $nodesToPrepend = [];
+        $variables = new Variable('variables');
+        $variablesAssign = new Assign($variables, $renderMethodCall);
+        $nodesToPrepend[] = new Expression($variablesAssign);
+        $extractVariables = new FuncCall(new Name('extract'), [$variables]);
+        $nodesToPrepend[] = new Expression($extractVariables);
+
+        // print template file
+        $fileContent = '<?php' . PHP_EOL .  $this->print($nodesToPrepend) . PHP_EOL . '?>' . PHP_EOL . $this->printNodesToString($nodes);
+
+        $this->filesystem->dumpFile($smartFileInfo->getRealPath(), $fileContent);
+    }
+
     private function createControllerFileDestination(SmartFileInfo $smartFileInfo): string
     {
         $currentDirectory = dirname($smartFileInfo->getRealPath());
@@ -135,10 +142,9 @@ CODE_SAMPLE
     private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables): Class_
     {
         $controllerName = $this->createControllerName($smartFileInfo);
-        $classController = new Class_($controllerName);
 
-        $renderMethod = $this->createControllerRenderMethod($variables);
-        $classController->stmts[] = $renderMethod;
+        $classController = new Class_($controllerName);
+        $classController->stmts[] = $this->createControllerRenderMethod($variables);
 
         return $classController;
     }

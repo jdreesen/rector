@@ -17,6 +17,16 @@ abstract class AbstractFileSystemRector implements FileSystemRectorInterface
     use AbstractRectorTrait;
 
     /**
+     * @var Filesystem
+     */
+    protected $filesystem;
+
+    /**
+     * @var FormatPerservingPrinter
+     */
+    protected $formatPerservingPrinter;
+
+    /**
      * @var Parser
      */
     private $parser;
@@ -27,19 +37,9 @@ abstract class AbstractFileSystemRector implements FileSystemRectorInterface
     private $lexer;
 
     /**
-     * @var FormatPerservingPrinter
-     */
-    private $formatPerservingPrinter;
-
-    /**
      * @var NodeScopeAndMetadataDecorator
      */
     private $nodeScopeAndMetadataDecorator;
-
-    /**
-     * @var Filesystem
-     */
-    private $filesystem;
 
     /**
      * @var Node[]
@@ -81,14 +81,17 @@ abstract class AbstractFileSystemRector implements FileSystemRectorInterface
     /**
      * @param Node[] $nodes
      */
+    protected function printNodesToString(array $nodes): string
+    {
+        return $this->formatPerservingPrinter->printToString($nodes, $this->oldStmts, $this->lexer->getTokens());
+    }
+
+    /**
+     * @param Node[] $nodes
+     */
     protected function printNodesToFilePath(array $nodes, string $fileDestination): void
     {
-        $fileContent = $this->formatPerservingPrinter->printToString(
-            $nodes,
-            $this->oldStmts,
-            $this->lexer->getTokens()
-        );
-
+        $fileContent = $this->printNodesToString($nodes);
         $this->filesystem->dumpFile($fileDestination, $fileContent);
     }
 }
