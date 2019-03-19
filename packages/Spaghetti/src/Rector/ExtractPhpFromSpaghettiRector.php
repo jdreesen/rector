@@ -42,7 +42,7 @@ final class ExtractPhpFromSpaghettiRector extends AbstractFileSystemRector
     private $stringFormatConverter;
 
     /**
-     * @var Node[]
+     * @var Stmt[]
      */
     private $rootNodesToRenderMethod = [];
 
@@ -198,7 +198,6 @@ CODE_SAMPLE
 
     /**
      * @param Expr[] $variables
-     * @param Stmt[] $prependNodes
      */
     private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables): Class_
     {
@@ -216,6 +215,7 @@ CODE_SAMPLE
     private function createControllerRenderMethod(array $variables): ClassMethod
     {
         $renderMethod = $this->nodeFactory->createPublicMethod('render');
+        $renderMethod->stmts = [];
 
         $array = new Array_();
         foreach ($variables as $name => $expr) {
@@ -273,13 +273,14 @@ CODE_SAMPLE
         return Strings::replace($fileContent, '#\?\>(\s+)\<\?php#s');
     }
 
-    private function makeChangePersistent(Node $node): Node
+    private function makeChangePersistent(Stmt $stmt): Stmt
     {
-        $nodes = $this->callableNodeTraverser->traverseNodesWithCallable([$node], function (Node $node) {
+        /** @var Stmt[] $nodes */
+        $nodes = $this->callableNodeTraverser->traverseNodesWithCallable([$stmt], function (Node $stmt) {
 
             // complete assign to foreach if not recorded yet
-            if ($node instanceof Foreach_) { // @todo or anything with "stmts" property
-                $foreach = $node;
+            if ($stmt instanceof Foreach_) { // @todo or anything with "stmts" property
+                $foreach = $stmt;
                 foreach ($foreach->stmts as $key => $foreachStmt) {
                     $foreachStmt = $foreachStmt instanceof Expression ? $foreachStmt->expr : $foreachStmt;
 
@@ -295,7 +296,7 @@ CODE_SAMPLE
                         }
 
                         if (! $this->areNodesEqual($foreach->valueVar, $foreachStmt->var)) {
-                            return $node;
+                            return $stmt;
                         }
 
                         $assign = $this->createForeachKeyAssign($foreach, $foreachStmt->var);
@@ -304,11 +305,15 @@ CODE_SAMPLE
                 }
             }
 
-            return $node;
+            return $stmt;
         });
 
         // only 1 node passed → 1 node is returned
-        return array_pop($nodes);
+        if (! isset($nodes[0])) {
+            throw new ShouldNotHappenException();
+        }
+
+        return $nodes[0];
     }
 
     private function createForeachKeyAssign(Foreach_ $foreach, Expr $expr): Assign
