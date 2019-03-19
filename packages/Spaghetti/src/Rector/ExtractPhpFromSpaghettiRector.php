@@ -2,6 +2,7 @@
 
 namespace Rector\Spaghetti\Rector;
 
+use Nette\Utils\Strings;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
@@ -14,6 +15,7 @@ use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Echo_;
@@ -108,7 +110,7 @@ CODE_SAMPLE
 
             if ($node instanceof Echo_) {
                 if (count($node->exprs) === 1) {
-                    // it is already variable, nothing to change
+                    // is it already a variable? nothing to change
                     if ($node->exprs[0] instanceof Variable) {
                         continue;
                     }
@@ -135,7 +137,6 @@ CODE_SAMPLE
             }
         }
 
-        // create Controller here
         $classController = $this->createControllerClass($smartFileInfo, $variables, $rootNodesToRenderMethod);
 
         // print controller
@@ -146,26 +147,7 @@ CODE_SAMPLE
             throw new ShouldNotHappenException();
         }
 
-        $newController = new New_(new Name($classController->name->toString()));
-        $renderMethodCall = new MethodCall($newController, 'render');
-
-        $nodesToPrepend = [];
-        $variables = new Variable('variables');
-        $variablesAssign = new Assign($variables, $renderMethodCall);
-        $nodesToPrepend[] = new Expression($variablesAssign);
-        $extractVariables = new FuncCall(new Name('extract'), [new Arg($variables)]);
-        $nodesToPrepend[] = new Expression($extractVariables);
-
-        // print template file
-        $fileContent = sprintf(
-            '<?php%s%s%s?>%s%s',
-            PHP_EOL,
-            $this->print($nodesToPrepend),
-            PHP_EOL,
-            PHP_EOL,
-            $this->printNodesToString($nodes)
-        );
-
+        $fileContent = $this->completeAndPrintControllerRenderMethod($classController, $nodes);
         $this->filesystem->dumpFile($smartFileInfo->getRealPath(), $fileContent);
     }
 
@@ -178,12 +160,16 @@ CODE_SAMPLE
 
     private function createControllerName(SmartFileInfo $smartFileInfo): string
     {
-        $camelCaseName = $this->stringFormatConverter->underscoreToCamelCase($smartFileInfo->getBasenameWithoutSuffix());
+        $camelCaseName = $this->stringFormatConverter->underscoreToCamelCase(
+            $smartFileInfo->getBasenameWithoutSuffix()
+        );
+
         return ucfirst($camelCaseName) . 'Controller';
     }
 
     /**
      * @param Expr[] $variables
+     * @param Stmt[] $prependNodes
      */
     private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables, array $prependNodes): Class_
     {
@@ -197,7 +183,7 @@ CODE_SAMPLE
 
     /**
      * @param Expr[] $variables
-     * @param Node[] $prependNodes
+     * @param Stmt[] $prependNodes
      */
     private function createControllerRenderMethod(array $variables, array $prependNodes): ClassMethod
     {
@@ -215,5 +201,40 @@ CODE_SAMPLE
         $renderMethod->stmts[] = new Return_($array);
 
         return $renderMethod;
+    }
+
+    /**
+     * @param Node[] $nodes
+     */
+    private function completeAndPrintControllerRenderMethod(Class_ $classController, array $nodes): string
+    {
+        if ($classController->name === null) {
+            throw new ShouldNotHappenException();
+        }
+
+        $newController = new New_(new Name($classController->name->toString()));
+        $renderMethodCall = new MethodCall($newController, 'render');
+
+        $nodesToPrepend = [];
+
+        $variables = new Variable('variables');
+        $variablesAssign = new Assign($variables, $renderMethodCall);
+        $nodesToPrepend[] = new Expression($variablesAssign);
+
+        $extractVariables = new FuncCall(new Name('extract'), [new Arg($variables)]);
+        $nodesToPrepend[] = new Expression($extractVariables);
+
+        // print template file
+        $fileContent = sprintf(
+            '<?php%s%s%s?>%s%s',
+            PHP_EOL,
+            $this->print($nodesToPrepend),
+            PHP_EOL,
+            PHP_EOL,
+            $this->printNodesToString($nodes)
+        );
+
+        // remove "? >...< ?php" leftovers
+        return Strings::replace($fileContent, '#\?\>(\s+)\<\?php#s');
     }
 }

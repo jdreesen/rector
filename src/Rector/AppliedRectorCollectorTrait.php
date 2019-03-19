@@ -5,7 +5,6 @@ namespace Rector\Rector;
 use PhpParser\Node;
 use Rector\Application\AppliedRectorCollector;
 use Rector\NodeTypeResolver\Node\Attribute;
-use Rector\PhpParser\Node\Manipulator\ConstFetchManipulator;
 
 /**
  * This could be part of @see AbstractRector, but decopuling to trait

@@ -136,6 +136,7 @@ parameters:
 
         - '#Parameter \#2 \$classMethod of method Rector\\NetteToSymfony\\Rector\\ClassMethod\\RouterListToControllerAnnotationsRector\:\:resolvePathFromClassAndMethodNodes\(\) expects PhpParser\\Node\\Stmt\\ClassMethod, PhpParser\\Node\\Stmt given#'
         - '#Parameter \#2 \$constFetch of method Rector\\CodeQuality\\Rector\\Identical\\SimplifyArraySearchRector\:\:resolveIsNot\(\) expects PhpParser\\Node\\Expr\\ConstFetch, PhpParser\\Node given#'
+        - '#Parameter \#3 \$prependNodes of method Rector\\Spaghetti\\Rector\\ExtractPhpFromSpaghettiRector\:\:createControllerClass\(\) expects array<PhpParser\\Node\\Stmt\>, array<int, PhpParser\\Node\> given#'
 
         # trait false positive
         - '#Call to an undefined method Rector\\FileSystemRector\\Rector\\AbstractFileSystemRector\:\:notifyNodeChangeFileInfo\(\)#'

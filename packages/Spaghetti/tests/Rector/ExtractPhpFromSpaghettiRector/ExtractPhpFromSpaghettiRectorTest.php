@@ -55,17 +55,17 @@ final class ExtractPhpFromSpaghettiRectorTest extends AbstractKernelTestCase
     public function provideExceptionsData(): Iterator
     {
         yield [
-//            __DIR__ . '/Source/index.php',
-//            [
-//                // expected file location => expected file content
-//                __DIR__ . '/Source/index.php' => __DIR__ . '/Expected/index.php',
-//                __DIR__ . '/Source/IndexController.php' => __DIR__ . '/Expected/IndexController.php',
-//            ],
+            //            __DIR__ . '/Source/index.php',
+            //            [
+            //                // expected file location => expected file content
+            //                __DIR__ . '/Source/index.php' => __DIR__ . '/Expected/index.php',
+            //                __DIR__ . '/Source/IndexController.php' => __DIR__ . '/Expected/IndexController.php',
+            //            ],
 
             __DIR__ . '/Source/simple_foreach.php',
             [
-//                // expected file location => expected file content
-                __DIR__ . '/Source/simple_foreach.php' => __DIR__ . '/Expected/simple_foreach.php',
+                //                // expected file location => expected file content
+                //                __DIR__ . '/Source/simple_foreach.php' => __DIR__ . '/Expected/simple_foreach.php',
                 __DIR__ . '/Source/SimpleForeachController.php' => __DIR__ . '/Expected/SimpleForeachController.php',
             ],
         ];
