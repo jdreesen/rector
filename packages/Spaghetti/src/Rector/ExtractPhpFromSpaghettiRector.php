@@ -2,6 +2,7 @@
 
 namespace Rector\Spaghetti\Rector;
 
+use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
@@ -83,6 +84,11 @@ CODE_SAMPLE
         );
     }
 
+    public function isNodeEchoedAnywhereInside(Node $node): bool
+    {
+        return (bool) $this->betterNodeFinder->findInstanceOf($node, Echo_::class);
+    }
+
     public function refactor(SmartFileInfo $smartFileInfo): void
     {
         $nodes = $this->parseFileInfoToNodes($smartFileInfo);
@@ -91,7 +97,10 @@ CODE_SAMPLE
         $variables = [];
 
         $i = 0;
-        foreach ($nodes as $node) {
+
+        $rootNodesToRenderMethod = [];
+
+        foreach ($nodes as $key => $node) {
             if ($node instanceof InlineHTML) {
                 // @todo are we in a for/foreach?
                 continue;
@@ -112,13 +121,22 @@ CODE_SAMPLE
                     $node->exprs[0] = new Variable($variableName);
                 }
             } else {
-                // @todo
-//                dump($node);
+                // expression assign variable!?
+                if ($this->isNodeEchoedAnywhereInside($node)) {
+                    // @todo solve
+                    dump('YES');
+                } else {
+                    // just copy
+                    $rootNodesToRenderMethod[] = $node;
+                    // remove node
+                    unset($nodes[$key]);
+                    continue;
+                }
             }
         }
 
         // create Controller here
-        $classController = $this->createControllerClass($smartFileInfo, $variables);
+        $classController = $this->createControllerClass($smartFileInfo, $variables, $rootNodesToRenderMethod);
 
         // print controller
         $fileDestination = $this->createControllerFileDestination($smartFileInfo);
@@ -167,26 +185,31 @@ CODE_SAMPLE
     /**
      * @param Expr[] $variables
      */
-    private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables): Class_
+    private function createControllerClass(SmartFileInfo $smartFileInfo, array $variables, array $prependNodes): Class_
     {
         $controllerName = $this->createControllerName($smartFileInfo);
 
         $classController = new Class_($controllerName);
-        $classController->stmts[] = $this->createControllerRenderMethod($variables);
+        $classController->stmts[] = $this->createControllerRenderMethod($variables, $prependNodes);
 
         return $classController;
     }
 
     /**
      * @param Expr[] $variables
+     * @param Node[] $prependNodes
      */
-    private function createControllerRenderMethod(array $variables): ClassMethod
+    private function createControllerRenderMethod(array $variables, array $prependNodes): ClassMethod
     {
         $renderMethod = $this->nodeFactory->createPublicMethod('render');
 
         $array = new Array_();
         foreach ($variables as $name => $expr) {
             $array->items[] = new ArrayItem($expr, new String_($name));
+        }
+
+        if ($prependNodes) {
+            $renderMethod->stmts = $prependNodes;
         }
 
         $renderMethod->stmts[] = new Return_($array);

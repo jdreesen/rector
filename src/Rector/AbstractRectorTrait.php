@@ -10,6 +10,7 @@ namespace Rector\Rector;
  */
 trait AbstractRectorTrait
 {
+    use AppliedRectorCollectorTrait;
     use NodeTypeResolverTrait;
     use NameResolverTrait;
     use ConstFetchAnalyzerTrait;

@@ -8,7 +8,6 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\NodeVisitorAbstract;
-use Rector\Application\AppliedRectorCollector;
 use Rector\Application\RemovedFilesCollector;
 use Rector\Contract\Rector\PhpRectorInterface;
 use Rector\NodeTypeResolver\Node\Attribute;
@@ -20,11 +19,6 @@ use Symplify\PackageBuilder\FileSystem\SmartFileInfo;
 abstract class AbstractRector extends NodeVisitorAbstract implements PhpRectorInterface
 {
     use AbstractRectorTrait;
-
-    /**
-     * @var AppliedRectorCollector
-     */
-    private $appliedRectorCollector;
 
     /**
      * @var SymfonyStyle
@@ -50,13 +44,11 @@ abstract class AbstractRector extends NodeVisitorAbstract implements PhpRectorIn
      * @required
      */
     public function setAbstractRectorDependencies(
-        AppliedRectorCollector $appliedRectorCollector,
         SymfonyStyle $symfonyStyle,
         ValueResolver $valueResolver,
         RemovedFilesCollector $removedFilesCollector,
         PhpVersionProvider $phpVersionProvider
     ): void {
-        $this->appliedRectorCollector = $appliedRectorCollector;
         $this->symfonyStyle = $symfonyStyle;
         $this->valueResolver = $valueResolver;
         $this->removedFilesCollector = $removedFilesCollector;
@@ -166,18 +158,6 @@ abstract class AbstractRector extends NodeVisitorAbstract implements PhpRectorIn
         }
 
         return true;
-    }
-
-    protected function notifyNodeChangeFileInfo(Node $node): void
-    {
-        $fileInfo = $node->getAttribute(Attribute::FILE_INFO);
-        if ($fileInfo === null) {
-            // this file was changed before and this is a sub-new node
-            // array Traverse to all new nodes would have to be used, but it's not worth the performance
-            return;
-        }
-
-        $this->appliedRectorCollector->addRectorClass(static::class, $fileInfo);
     }
 
     protected function isAtLeastPhpVersion(string $version): bool
