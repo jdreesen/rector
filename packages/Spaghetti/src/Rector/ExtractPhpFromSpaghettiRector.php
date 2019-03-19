@@ -2,6 +2,7 @@
 
 namespace Rector\Spaghetti\Rector;
 
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayItem;
@@ -18,6 +19,7 @@ use PhpParser\Node\Stmt\Echo_;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\InlineHTML;
 use PhpParser\Node\Stmt\Return_;
+use Rector\Exception\ShouldNotHappenException;
 use Rector\FileSystemRector\Rector\AbstractFileSystemRector;
 use Rector\RectorDefinition\CodeSample;
 use Rector\RectorDefinition\RectorDefinition;
@@ -108,6 +110,10 @@ CODE_SAMPLE
         $fileDestination = $this->createControllerFileDestination($smartFileInfo);
         $this->printNodesToFilePath([$classController], $fileDestination);
 
+        if ($classController->name === null) {
+            throw new ShouldNotHappenException();
+        }
+
         $newController = new New_(new Name($classController->name->toString()));
         $renderMethodCall = new MethodCall($newController, 'render');
 
@@ -115,11 +121,18 @@ CODE_SAMPLE
         $variables = new Variable('variables');
         $variablesAssign = new Assign($variables, $renderMethodCall);
         $nodesToPrepend[] = new Expression($variablesAssign);
-        $extractVariables = new FuncCall(new Name('extract'), [$variables]);
+        $extractVariables = new FuncCall(new Name('extract'), [new Arg($variables)]);
         $nodesToPrepend[] = new Expression($extractVariables);
 
         // print template file
-        $fileContent = '<?php' . PHP_EOL .  $this->print($nodesToPrepend) . PHP_EOL . '?>' . PHP_EOL . $this->printNodesToString($nodes);
+        $fileContent = sprintf(
+            '<?php%s%s%s?>%s%s',
+            PHP_EOL,
+            $this->print($nodesToPrepend),
+            PHP_EOL,
+            PHP_EOL,
+            $this->printNodesToString($nodes)
+        );
 
         $this->filesystem->dumpFile($smartFileInfo->getRealPath(), $fileContent);
     }
